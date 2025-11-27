@@ -3,7 +3,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { BetModal } from "./bet-modal";
-import { Clock, TrendingUp, Users } from "lucide-react";
+import { Clock, TrendingUp, Users, Database } from "lucide-react";
 import { format } from "date-fns";
 import { ethers } from "ethers";
 
@@ -15,6 +15,8 @@ export interface Market {
   endTime: number; // unix timestamp
   resolved: boolean;
   outcome: number; // 0 pending, 1 yes, 2 no, 3 void
+  oracle?: string; // Oracle data source for settlement
+  isOnChain?: boolean; // Whether this market exists on the smart contract
 }
 
 export function MarketCard({ market }: { market: Market }) {
@@ -35,6 +37,7 @@ export function MarketCard({ market }: { market: Market }) {
   };
 
   const isEnded = Date.now() / 1000 > market.endTime;
+  const isPreview = market.isOnChain === false;
 
   return (
     <>
@@ -42,7 +45,11 @@ export function MarketCard({ market }: { market: Market }) {
         <CardHeader className="pb-2">
           <div className="flex justify-between items-start gap-4">
             <CardTitle className="text-xl leading-tight font-display">{market.question}</CardTitle>
-            {isEnded ? (
+            {isPreview ? (
+              <span className="px-2 py-1 rounded text-xs font-bold bg-yellow-500/10 text-yellow-500 uppercase tracking-wider">
+                Coming Soon
+              </span>
+            ) : isEnded ? (
               <span className="px-2 py-1 rounded text-xs font-bold bg-muted text-muted-foreground uppercase tracking-wider">
                 Ended
               </span>
@@ -61,7 +68,7 @@ export function MarketCard({ market }: { market: Market }) {
           </div>
           <Progress value={yesPercent} className="h-3 bg-red-500/20 [&>div]:bg-primary" />
           
-          <div className="mt-4 flex gap-4 text-xs text-muted-foreground">
+          <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Users className="w-3 h-3" />
               <span>${totalPool.toFixed(2)} Vol</span>
@@ -70,26 +77,40 @@ export function MarketCard({ market }: { market: Market }) {
               <Clock className="w-3 h-3" />
               <span>Ends {format(new Date(market.endTime * 1000), "MMM d, yyyy")}</span>
             </div>
+            {market.oracle && (
+              <div className="flex items-center gap-1 text-primary/80">
+                <Database className="w-3 h-3" />
+                <span>{market.oracle}</span>
+              </div>
+            )}
           </div>
         </CardContent>
 
         <CardFooter className="grid grid-cols-2 gap-3 pt-0">
-          <Button 
-            variant="outline" 
-            className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary"
-            onClick={() => handleBet(true)}
-            disabled={isEnded}
-          >
-            Bet YES
-          </Button>
-          <Button 
-            variant="outline" 
-            className="border-red-500/30 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500"
-            onClick={() => handleBet(false)}
-            disabled={isEnded}
-          >
-            Bet NO
-          </Button>
+          {isPreview ? (
+            <div className="col-span-2 text-center py-2 text-sm text-muted-foreground border border-dashed rounded-md">
+              Market not yet deployed on-chain
+            </div>
+          ) : (
+            <>
+              <Button 
+                variant="outline" 
+                className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary"
+                onClick={() => handleBet(true)}
+                disabled={isEnded}
+              >
+                Bet YES
+              </Button>
+              <Button 
+                variant="outline" 
+                className="border-red-500/30 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500"
+                onClick={() => handleBet(false)}
+                disabled={isEnded}
+              >
+                Bet NO
+              </Button>
+            </>
+          )}
         </CardFooter>
       </Card>
 
