@@ -18,6 +18,7 @@ interface Web3ContextType {
   internalBalance: string;
   walletBalance: string;
   connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
   refreshBalances: () => Promise<void>;
   isConnecting: boolean;
   chainId: number | null;
@@ -99,6 +100,16 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   };
 
+  const disconnectWallet = () => {
+    setAccount(null);
+    setSigner(null);
+    setContract(null);
+    setUsdcContract(null);
+    setInternalBalance("0");
+    setWalletBalance("0");
+    setChainId(null);
+  };
+
   const connectWallet = async () => {
     if (!window.ethereum) {
       toast({
@@ -115,12 +126,23 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Request accounts
+      // Use wallet_requestPermissions to force account selection popup
+      // This allows users to choose a different account
+      try {
+        await window.ethereum.request({
+          method: "wallet_requestPermissions",
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (permError: any) {
+        // User rejected the permission request, that's okay
+        if (permError.code !== 4001) {
+          console.warn("Permission request failed:", permError);
+        }
+      }
+
+      // Request accounts after permission
       const accounts = await provider.send("eth_requestAccounts", []);
       setAccount(accounts[0]);
-
-      // Check chain ID (ARC Testnet Chain ID might be needed here, but usually standard tools handle switch)
-      // For now we just connect.
       
     } catch (error: any) {
       console.error("Connection error:", error);
@@ -144,6 +166,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       internalBalance,
       walletBalance,
       connectWallet,
+      disconnectWallet,
       refreshBalances,
       isConnecting,
       chainId
