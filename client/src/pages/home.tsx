@@ -5,34 +5,186 @@ import { Navbar } from "@/components/navbar";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Mock data for initial display or fallback
+// Oracle-verifiable prediction markets
+// These can be settled using price feeds from Chainlink, Pyth, CoinGecko, or other data providers
 const MOCK_MARKETS: Market[] = [
+  // === PRICE TARGET MARKETS (Chainlink/Pyth Price Feeds) ===
   {
     id: 999,
-    question: "Will Bitcoin (BTC) break $100,000 before 2026?",
-    totalYes: "15000",
-    totalNo: "12000",
-    endTime: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+    question: "Will Bitcoin (BTC) break $150,000 before Q2 2026?",
+    totalYes: "45000",
+    totalNo: "32000",
+    endTime: Math.floor(new Date("2026-04-01").getTime() / 1000),
     resolved: false,
-    outcome: 0
+    outcome: 0,
+    oracle: "Chainlink BTC/USD",
+    isOnChain: false
   },
   {
     id: 998,
-    question: "Will Ethereum (ETH) flippen Bitcoin by market cap in 2025?",
-    totalYes: "5000",
-    totalNo: "25000",
-    endTime: Math.floor(Date.now() / 1000) + 86400 * 60,
+    question: "Will Ethereum (ETH) reach $6,000 before June 2026?",
+    totalYes: "28000",
+    totalNo: "19000",
+    endTime: Math.floor(new Date("2026-06-01").getTime() / 1000),
     resolved: false,
-    outcome: 0
+    outcome: 0,
+    oracle: "Chainlink ETH/USD",
+    isOnChain: false
   },
   {
     id: 997,
-    question: "Will ARC Mainnet launch before Q2 2025?",
-    totalYes: "8000",
-    totalNo: "2000",
-    endTime: Math.floor(Date.now() / 1000) + 86400 * 14,
+    question: "Will Solana (SOL) hit $400 before September 2026?",
+    totalYes: "12000",
+    totalNo: "18000",
+    endTime: Math.floor(new Date("2026-09-01").getTime() / 1000),
     resolved: false,
-    outcome: 0
+    outcome: 0,
+    oracle: "Pyth SOL/USD",
+    isOnChain: false
+  },
+  {
+    id: 996,
+    question: "Will XRP break $5 in 2026?",
+    totalYes: "8500",
+    totalNo: "6200",
+    endTime: Math.floor(new Date("2026-12-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Chainlink XRP/USD",
+    isOnChain: false
+  },
+  
+  // === MARKET CAP MARKETS (CoinGecko/CoinMarketCap API) ===
+  {
+    id: 995,
+    question: "Will Ethereum flippen Bitcoin by market cap in 2026?",
+    totalYes: "5000",
+    totalNo: "42000",
+    endTime: Math.floor(new Date("2026-12-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "CoinGecko Market Cap",
+    isOnChain: false
+  },
+  {
+    id: 994,
+    question: "Will a memecoin enter the top 5 by market cap?",
+    totalYes: "15000",
+    totalNo: "8000",
+    endTime: Math.floor(new Date("2026-06-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "CoinMarketCap Rankings",
+    isOnChain: false
+  },
+  
+  // === DEFI TVL MARKETS (DefiLlama API) ===
+  {
+    id: 993,
+    question: "Will Total DeFi TVL exceed $300 billion in 2026?",
+    totalYes: "22000",
+    totalNo: "11000",
+    endTime: Math.floor(new Date("2026-12-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "DefiLlama TVL",
+    isOnChain: false
+  },
+  {
+    id: 992,
+    question: "Will Aave TVL surpass $50 billion by Q3 2026?",
+    totalYes: "9500",
+    totalNo: "7200",
+    endTime: Math.floor(new Date("2026-09-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "DefiLlama Protocol TVL",
+    isOnChain: false
+  },
+  
+  // === NETWORK METRICS (On-chain Data) ===
+  {
+    id: 991,
+    question: "Will Ethereum daily active addresses exceed 2 million?",
+    totalYes: "18000",
+    totalNo: "14000",
+    endTime: Math.floor(new Date("2026-06-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Etherscan Analytics",
+    isOnChain: false
+  },
+  {
+    id: 990,
+    question: "Will Bitcoin hashrate exceed 1000 EH/s?",
+    totalYes: "11000",
+    totalNo: "9000",
+    endTime: Math.floor(new Date("2026-08-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Blockchain.com Hashrate",
+    isOnChain: false
+  },
+  
+  // === STABLECOIN MARKETS ===
+  {
+    id: 989,
+    question: "Will USDC market cap exceed $80 billion?",
+    totalYes: "16000",
+    totalNo: "8500",
+    endTime: Math.floor(new Date("2026-06-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "CoinGecko Stablecoin Data",
+    isOnChain: false
+  },
+  
+  // === PROTOCOL EVENTS ===
+  {
+    id: 988,
+    question: "Will ARC Mainnet launch before Q1 2026?",
+    totalYes: "25000",
+    totalNo: "5000",
+    endTime: Math.floor(new Date("2026-03-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Official Announcement",
+    isOnChain: false
+  },
+  {
+    id: 987,
+    question: "Will Ethereum complete Verkle Trees upgrade in 2026?",
+    totalYes: "19000",
+    totalNo: "12000",
+    endTime: Math.floor(new Date("2026-12-31").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Ethereum.org Updates",
+    isOnChain: false
+  },
+  
+  // === EXCHANGE & TRADING VOLUME ===
+  {
+    id: 986,
+    question: "Will daily CEX trading volume exceed $1 Trillion?",
+    totalYes: "7500",
+    totalNo: "12500",
+    endTime: Math.floor(new Date("2026-06-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "CoinGecko Exchange Volume",
+    isOnChain: false
+  },
+  {
+    id: 985,
+    question: "Will Uniswap monthly volume exceed $200 billion?",
+    totalYes: "13000",
+    totalNo: "9000",
+    endTime: Math.floor(new Date("2026-06-30").getTime() / 1000),
+    resolved: false,
+    outcome: 0,
+    oracle: "Dune Analytics",
+    isOnChain: false
   }
 ];
 
@@ -47,39 +199,39 @@ export default function Home() {
       
       setIsLoading(true);
       try {
-        // Try to fetch first 5 markets
         const fetchedMarkets: Market[] = [];
         
-        // We don't have a getMarketCount, so we'll try fetching ID 0, 1, 2... until fail
-        // Or just fetch a fixed number for this demo since we can't read array length easily from public array getter in standard ethers without a wrapper
-        // Actually, public array getter throws if out of bounds usually.
-        
-        for (let i = 0; i < 5; i++) {
+        // Fetch up to 50 markets from the contract
+        for (let i = 0; i < 50; i++) {
           try {
             const m = await contract.markets(i);
-            // m is a struct-like array/object
-            // Struct: id, question, totalYesAmount, totalNoAmount, outcome, isResolved, endTime
             
             fetchedMarkets.push({
               id: Number(m.id),
               question: m.question,
-              totalYes: (Number(m.totalYesAmount) / 1000000).toString(), // 6 decimals
+              totalYes: (Number(m.totalYesAmount) / 1000000).toString(),
               totalNo: (Number(m.totalNoAmount) / 1000000).toString(),
               endTime: Number(m.endTime),
               resolved: m.isResolved,
-              outcome: Number(m.outcome)
+              outcome: Number(m.outcome),
+              isOnChain: true
             });
           } catch (e) {
-            // Stop if we hit an error (likely out of bounds)
+            // Stop if we hit an error (out of bounds)
             break;
           }
         }
 
         if (fetchedMarkets.length > 0) {
-          setMarkets([...fetchedMarkets, ...MOCK_MARKETS]); // Show both for demo purposes
+          // Show only on-chain markets when they exist
+          setMarkets(fetchedMarkets);
+        } else {
+          // Show preview markets only when no on-chain markets exist
+          setMarkets(MOCK_MARKETS);
         }
       } catch (error) {
         console.error("Failed to fetch markets", error);
+        setMarkets(MOCK_MARKETS);
       } finally {
         setIsLoading(false);
       }
