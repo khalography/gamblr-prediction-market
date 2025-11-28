@@ -72,7 +72,7 @@ const PREVIEW_MARKETS: PreviewMarket[] = [
 ];
 
 export default function Admin() {
-  const { contract, account } = useWeb3();
+  const { getContract, account } = useWeb3();
   const isConnected = !!account;
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
@@ -81,6 +81,7 @@ export default function Admin() {
   const [customEndDate, setCustomEndDate] = useState("");
 
   const createMarket = async (question: string, endDateStr: string, index?: number) => {
+    const contract = getContract();
     if (!contract) {
       toast({ title: "Error", description: "Please connect your wallet first", variant: "destructive" });
       return;
