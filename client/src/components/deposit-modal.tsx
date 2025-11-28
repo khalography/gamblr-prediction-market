@@ -83,9 +83,9 @@ export function DepositModal() {
                 placeholder="100"
                 className="col-span-3"
               />
-              <span className="text-sm font-bold text-muted-foreground">USDC</span>
+              <span className="text-sm font-bold text-foreground">USDC</span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-foreground">
               Wallet Balance: {Number(walletBalance).toFixed(2)} USDC
             </p>
           </div>
