@@ -1,0 +1,33 @@
+13:34:50.498 Running build in Washington, D.C., USA (East) – iad1
+13:34:50.499 Build machine configuration: 2 cores, 8 GB
+13:34:50.687 Cloning github.com/khalography/gamblr-prediction-market (Branch: main, Commit: 04b4978)
+13:34:50.688 Previous build caches not available.
+13:34:51.019 Cloning completed: 331.000ms
+13:34:51.413 Running "vercel build"
+13:34:52.590 Vercel CLI 48.12.0
+13:34:53.448 Installing dependencies...
+13:35:28.513 npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+13:35:28.649 npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+13:35:35.425 
+13:35:35.426 added 417 packages in 41s
+13:35:35.427 
+13:35:35.428 45 packages are looking for funding
+13:35:35.428   run `npm fund` for details
+13:35:35.493 Running "npm run build"
+13:35:35.607 
+13:35:35.608 > rest-express@1.0.0 build
+13:35:35.608 > vite build && esbuild server/index-prod.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js
+13:35:35.608 
+13:35:36.082 [36mvite v7.2.4 [32mbuilding client environment for production...[36m[39m
+13:35:36.153 transforming...
+13:35:36.544 [32m✓[39m 17 modules transformed.
+13:35:36.549 [31m✗[39m Build failed in 432ms
+13:35:36.550 [31merror during build:
+13:35:36.550 [31m[vite:load-fallback] Could not load /vercel/path0/client/src/pages/portfolio (imported by client/src/App.tsx): ENOENT: no such file or directory, open '/vercel/path0/client/src/pages/portfolio'[31m
+13:35:36.550     at async open (node:internal/fs/promises:642:25)
+13:35:36.550     at async Object.readFile (node:internal/fs/promises:1279:14)
+13:35:36.550     at async Object.handler (file:///vercel/path0/node_modules/vite/dist/node/chunks/config.js:33817:21)
+13:35:36.551     at async PluginDriver.hookFirstAndGetPlugin (file:///vercel/path0/node_modules/rollup/dist/es/shared/node-entry.js:22333:28)
+13:35:36.551     at async file:///vercel/path0/node_modules/rollup/dist/es/shared/node-entry.js:21333:33
+13:35:36.551     at async Queue.work (file:///vercel/path0/node_modules/rollup/dist/es/shared/node-entry.js:22561:32)[39m
+13:35:36.593 Error: Command "npm run build" exited with 1
