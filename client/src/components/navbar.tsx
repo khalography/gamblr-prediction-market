@@ -65,7 +65,7 @@ export function Navbar() {
               </DropdownMenu>
             </>
           ) : (
-            <Button onClick={connectWallet} disabled={isConnecting}>
+            <Button onClick={() => connectWallet()} disabled={isConnecting}>
               {isConnecting ? "Connecting..." : (
                 <>
                   <Wallet className="mr-2 h-4 w-4" />
