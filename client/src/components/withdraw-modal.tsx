@@ -86,7 +86,7 @@ export function WithdrawModal() {
                 MAX
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-foreground">
               Available Balance: {Number(internalBalance).toFixed(2)} USDC
             </p>
           </div>
