@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useWeb3 } from "@/lib/web3";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,21 +16,59 @@ interface PreviewMarket {
 }
 
 const PREVIEW_MARKETS: PreviewMarket[] = [
+  // EPL THIS WEEKEND (Nov 29-30, 2025)
+  { question: "Will Manchester City beat Leeds United this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
+  { question: "Will Everton beat Newcastle United this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
+  { question: "Will Tottenham beat Fulham this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
+  { question: "Will Brentford beat Burnley this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
+  { question: "Will Manchester United beat Crystal Palace this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  { question: "Will Liverpool beat West Ham this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  { question: "Will Arsenal beat Chelsea in the London Derby?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  { question: "Will Chelsea beat Arsenal in the London Derby?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  { question: "Will Aston Villa beat Wolverhampton this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  { question: "Will Nottingham Forest beat Brighton this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  // POLITICS - GERMANY (Feb 2025)
+  { question: "Will AfD become the largest party in German Bundestag?", endDate: "2025-02-23", oracle: "Bundeswahlleiter Results" },
+  // POLITICS - CANADA (Oct 2025)
+  { question: "Will the Conservative Party win Canada's Federal Election?", endDate: "2025-10-20", oracle: "Elections Canada Results" },
+  // SUPER BOWL LX (Feb 2026)
+  { question: "Will the Kansas City Chiefs win Super Bowl LX (2026)?", endDate: "2026-02-08", oracle: "NFL Official Results" },
+  { question: "Will Patrick Mahomes win Super Bowl LX MVP?", endDate: "2026-02-08", oracle: "NFL Official Results" },
+  // WINTER OLYMPICS 2026 (Feb 2026)
+  { question: "Will USA top the medal count at 2026 Winter Olympics?", endDate: "2026-02-22", oracle: "Olympics Official Results" },
+  { question: "Will Norway win the most gold medals at Milano Cortina 2026?", endDate: "2026-02-22", oracle: "Olympics Official Results" },
+  // ARC NETWORK (Mar 2026)
+  { question: "Will ARC Mainnet launch before Q1 2026?", endDate: "2026-03-31", oracle: "Official Announcement" },
+  // CRYPTO (Apr 2026)
   { question: "Will Bitcoin (BTC) break $150,000 before Q2 2026?", endDate: "2026-04-01", oracle: "Chainlink BTC/USD" },
+  // CRYPTO (Jun 2026)
   { question: "Will Ethereum (ETH) reach $6,000 before June 2026?", endDate: "2026-06-01", oracle: "Chainlink ETH/USD" },
+  // NBA (Jun 2026)
+  { question: "Will the Boston Celtics repeat as NBA Champions in 2026?", endDate: "2026-06-30", oracle: "NBA Official Results" },
+  { question: "Will a memecoin enter the top 5 by market cap?", endDate: "2026-06-30", oracle: "CoinMarketCap Rankings" },
+  // FIFA WORLD CUP 2026 (Jul 2026)
+  { question: "Will USA advance past the Round of 16 in 2026 World Cup?", endDate: "2026-07-07", oracle: "FIFA Official Results" },
+  { question: "Will Brazil reach the 2026 World Cup Semi-Finals?", endDate: "2026-07-15", oracle: "FIFA Official Results" },
+  { question: "Will Argentina win the 2026 FIFA World Cup?", endDate: "2026-07-19", oracle: "FIFA Official Results" },
+  { question: "Will France reach the 2026 World Cup Final?", endDate: "2026-07-19", oracle: "FIFA Official Results" },
+  { question: "Will England win the 2026 FIFA World Cup?", endDate: "2026-07-19", oracle: "FIFA Official Results" },
+  // CRYPTO (Aug-Sep 2026)
+  { question: "Will Bitcoin hashrate exceed 1000 EH/s?", endDate: "2026-08-31", oracle: "Blockchain.com Hashrate" },
   { question: "Will Solana (SOL) hit $400 before September 2026?", endDate: "2026-09-01", oracle: "Pyth SOL/USD" },
+  // NBA (Oct 2026)
+  { question: "Will LeBron James still be active in the NBA in 2026?", endDate: "2026-10-01", oracle: "NBA Official Roster" },
+  // POLITICS - BRAZIL (Oct 2026)
+  { question: "Will a far-right candidate reach Brazil's 2026 Presidential runoff?", endDate: "2026-10-04", oracle: "TSE Brazil Official Results" },
+  { question: "Will Lula win re-election in Brazil's 2026 Presidential Election?", endDate: "2026-10-25", oracle: "TSE Brazil Official Results" },
+  // POLITICS - US MIDTERMS (Nov 2026)
+  { question: "Will Democrats win the House majority in 2026 US Midterms?", endDate: "2026-11-03", oracle: "AP Election Results" },
+  { question: "Will Democrats win the Senate majority in 2026 US Midterms?", endDate: "2026-11-03", oracle: "AP Election Results" },
+  { question: "Will voter turnout exceed 50% in 2026 US Midterms?", endDate: "2026-11-03", oracle: "US Election Project" },
+  // CRYPTO & DEFI (Dec 2026)
   { question: "Will XRP break $5 in 2026?", endDate: "2026-12-31", oracle: "Chainlink XRP/USD" },
   { question: "Will Ethereum flippen Bitcoin by market cap in 2026?", endDate: "2026-12-31", oracle: "CoinGecko Market Cap" },
-  { question: "Will a memecoin enter the top 5 by market cap?", endDate: "2026-06-30", oracle: "CoinMarketCap Rankings" },
   { question: "Will Total DeFi TVL exceed $300 billion in 2026?", endDate: "2026-12-31", oracle: "DefiLlama TVL" },
-  { question: "Will Aave TVL surpass $50 billion by Q3 2026?", endDate: "2026-09-30", oracle: "DefiLlama Protocol TVL" },
-  { question: "Will Ethereum daily active addresses exceed 2 million?", endDate: "2026-06-30", oracle: "Etherscan Analytics" },
-  { question: "Will Bitcoin hashrate exceed 1000 EH/s?", endDate: "2026-08-31", oracle: "Blockchain.com Hashrate" },
-  { question: "Will USDC market cap exceed $80 billion?", endDate: "2026-06-30", oracle: "CoinGecko Stablecoin Data" },
-  { question: "Will ARC Mainnet launch before Q1 2026?", endDate: "2026-03-31", oracle: "Official Announcement" },
   { question: "Will Ethereum complete Verkle Trees upgrade in 2026?", endDate: "2026-12-31", oracle: "Ethereum.org Updates" },
-  { question: "Will daily CEX trading volume exceed $1 Trillion?", endDate: "2026-06-30", oracle: "CoinGecko Exchange Volume" },
-  { question: "Will Uniswap monthly volume exceed $200 billion?", endDate: "2026-06-30", oracle: "Dune Analytics" },
 ];
 
 export default function Admin() {
