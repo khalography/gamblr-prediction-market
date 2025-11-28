@@ -41,23 +41,33 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (window.ethereum) {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      setProvider(provider);
-      
-      window.ethereum.on("accountsChanged", (accounts: string[]) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-        } else {
-          setAccount(null);
-          setSigner(null);
-        }
-      });
+    let retries = 0;
+    const maxRetries = 5;
+    
+    const setupProvider = () => {
+      if (window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        setProvider(provider);
+        
+        window.ethereum.on("accountsChanged", (accounts: string[]) => {
+          if (accounts.length > 0) {
+            setAccount(accounts[0]);
+          } else {
+            setAccount(null);
+            setSigner(null);
+          }
+        });
 
-      window.ethereum.on("chainChanged", () => {
-        window.location.reload();
-      });
-    }
+        window.ethereum.on("chainChanged", () => {
+          window.location.reload();
+        });
+      } else if (retries < maxRetries) {
+        retries++;
+        setTimeout(setupProvider, 500);
+      }
+    };
+    
+    setupProvider();
   }, []);
 
   useEffect(() => {
@@ -126,7 +136,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     if (!window.ethereum) {
       toast({
         title: "Wallet not found",
-        description: "Please install MetaMask to use Gamblr.",
+        description: "Please install a Web3 wallet like MetaMask or Backpack to use Gamblr.",
         variant: "destructive"
       });
       return;
@@ -138,29 +148,45 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Use wallet_requestPermissions to force account selection popup
-      // This allows users to choose a different account
+      // Try to request accounts (works with most wallets)
+      let accounts: string[] = [];
+      
       try {
+        // First try wallet_requestPermissions for wallets that support it
         await window.ethereum.request({
           method: "wallet_requestPermissions",
           params: [{ eth_accounts: {} }]
         });
       } catch (permError: any) {
-        // User rejected the permission request, that's okay
+        // User rejected or method not supported, that's okay
         if (permError.code !== 4001) {
-          console.warn("Permission request failed:", permError);
+          console.warn("Permission request not supported:", permError);
         }
       }
 
-      // Request accounts after permission
-      const accounts = await provider.send("eth_requestAccounts", []);
-      setAccount(accounts[0]);
+      // Request accounts
+      accounts = await provider.send("eth_requestAccounts", []);
+      
+      if (accounts && accounts.length > 0) {
+        setAccount(accounts[0]);
+      } else {
+        throw new Error("No accounts returned from wallet");
+      }
       
     } catch (error: any) {
       console.error("Connection error:", error);
+      let errorMessage = error.message || "Could not connect wallet.";
+      
+      // Handle specific error codes
+      if (error.code === 4001) {
+        errorMessage = "You rejected the connection request.";
+      } else if (error.code === -32002) {
+        errorMessage = "Connection request already pending. Please check your wallet.";
+      }
+      
       toast({
         title: "Connection Failed",
-        description: error.message || "Could not connect wallet.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
