@@ -5,10 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Web3Provider } from "@/lib/web3";
 import { MobileNav } from "@/components/mobile-nav";
-import Home from "@/pages/home";
-import Admin from "@/pages/admin";
-import Portfolio from "@/pages/portfolio";
-import NotFound from "@/pages/not-found";
+import Home from "@/pages/home.tsx";
+import Admin from "@/pages/admin.tsx";
+import Portfolio from "@/pages/portfolio.tsx";
+import NotFound from "@/pages/not-found.tsx";
 
 function Router() {
   return (
