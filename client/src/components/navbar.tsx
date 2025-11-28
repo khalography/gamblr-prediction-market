@@ -12,7 +12,7 @@ import {
 import logoUrl from "@assets/Modern Gamblr Logo with Wordmark and Symbol_1764163079687.png";
 
 export function Navbar() {
-  const { account, connectWallet, disconnectWallet, internalBalance, isConnecting } = useWeb3();
+  const { account, connectWallet, disconnectWallet, internalBalance, isConnecting, isOwner } = useWeb3();
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -33,12 +33,14 @@ export function Navbar() {
               
               <DepositModal />
               
-              <Link href="/admin">
-                <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary/10" data-testid="link-admin">
-                  <Shield className="h-4 w-4 mr-1" />
-                  Admin
-                </Button>
-              </Link>
+              {isOwner && (
+                <Link href="/admin">
+                  <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary/10" data-testid="link-admin">
+                    <Shield className="h-4 w-4 mr-1" />
+                    Admin
+                  </Button>
+                </Link>
+              )}
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
