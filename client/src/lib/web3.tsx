@@ -22,6 +22,7 @@ interface Web3ContextType {
   refreshBalances: () => Promise<void>;
   isConnecting: boolean;
   chainId: number | null;
+  isOwner: boolean;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -36,6 +37,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const [walletBalance, setWalletBalance] = useState<string>("0");
   const [isConnecting, setIsConnecting] = useState(false);
   const [chainId, setChainId] = useState<number | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -70,6 +72,15 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           
           setContract(gamblr);
           setUsdcContract(usdc);
+          
+          // Check if connected account is the contract owner
+          try {
+            const ownerAddress = await gamblr.owner();
+            setIsOwner(ownerAddress.toLowerCase() === signer.address.toLowerCase());
+          } catch (e) {
+            console.error("Failed to fetch owner:", e);
+            setIsOwner(false);
+          }
           
           // Initial fetch
           await fetchBalances(signer.address, gamblr, usdc);
@@ -108,6 +119,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     setInternalBalance("0");
     setWalletBalance("0");
     setChainId(null);
+    setIsOwner(false);
   };
 
   const connectWallet = async () => {
@@ -169,7 +181,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       disconnectWallet,
       refreshBalances,
       isConnecting,
-      chainId
+      chainId,
+      isOwner
     }}>
       {children}
     </Web3Context.Provider>
