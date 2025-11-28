@@ -17,12 +17,13 @@ interface BetModalProps {
 }
 
 export function BetModal({ isOpen, onClose, marketId, question, isYes }: BetModalProps) {
-  const { contract, internalBalance, refreshBalances } = useWeb3();
+  const { getContract, internalBalance, refreshBalances } = useWeb3();
   const [amount, setAmount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   const handleBet = async () => {
+    const contract = getContract();
     if (!contract || !amount) return;
 
     setIsLoading(true);
