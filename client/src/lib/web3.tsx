@@ -177,13 +177,14 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   const fetchBalances = async (userAddress: string, gamblrContract: ethers.Contract, usdcContract: ethers.Contract) => {
     try {
-      const internal = await gamblrContract.balances(userAddress);
+      // Contract uses "userBalances" not "balances"
+      const internal = await gamblrContract.userBalances(userAddress);
       setInternalBalance(ethers.formatUnits(internal, 6));
       
       const wallet = await usdcContract.balanceOf(userAddress);
       setWalletBalance(ethers.formatUnits(wallet, 6));
     } catch (e) {
-      console.error("Failed to fetch balances", e);
+      console.error("Failed to fetch balances:", e);
     }
   };
 
