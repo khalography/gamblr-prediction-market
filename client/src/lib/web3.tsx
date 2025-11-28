@@ -6,7 +6,33 @@ import { useToast } from "@/hooks/use-toast";
 declare global {
   interface Window {
     ethereum: any;
+    ethereumReady?: boolean;
   }
+}
+
+// Utility to safely wait for wallet injection with exponential backoff
+async function waitForEthereum(maxWaitMs = 3000): Promise<any> {
+  const startTime = Date.now();
+  let lastError: any;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    if (window.ethereum) {
+      console.log("Ethereum provider found");
+      return window.ethereum;
+    }
+
+    // Check for wallet-specific injections
+    if (window.ethereum?.request || typeof window.ethereum?.send === "function") {
+      console.log("Ethereum provider detected");
+      return window.ethereum;
+    }
+
+    const elapsed = Date.now() - startTime;
+    const delay = Math.min(100 + elapsed / 10, 500);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+
+  throw new Error("Wallet not detected. Please ensure your Web3 wallet extension is installed and enabled.");
 }
 
 interface Web3ContextType {
@@ -133,39 +159,47 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   };
 
   const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast({
-        title: "Wallet not found",
-        description: "Please install a Web3 wallet like MetaMask or Backpack to use Gamblr.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     setIsConnecting(true);
     try {
-      // Create provider from window.ethereum
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      // Wait for wallet to be injected with timeout
+      const ethereum = await waitForEthereum(3000);
+
+      // Create provider from ethereum
+      const provider = new ethers.BrowserProvider(ethereum);
       
       // Get network info
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Request accounts using the provider method
-      // This is more reliable than calling window.ethereum.request directly
+      // Request accounts - use a safer method that avoids proxy issues
       let accounts: string[] = [];
       
       try {
+        // Try the primary method
         accounts = await provider.send("eth_requestAccounts", []);
-      } catch (sendError: any) {
-        console.error("eth_requestAccounts error:", sendError);
+      } catch (primaryError: any) {
+        console.error("Primary eth_requestAccounts failed:", primaryError);
         
-        // If that fails, try using listAccounts as fallback
-        if (sendError.code === 4001 || sendError.message?.includes("rejected")) {
+        // Check if it's a rejection
+        if (primaryError.code === 4001 || primaryError.message?.includes("rejected")) {
           throw new Error("You rejected the connection request.");
         }
         
-        throw sendError;
+        // Try alternative: directly access ethereum if provider.send failed
+        try {
+          console.log("Trying alternative connection method...");
+          if (typeof ethereum.request === "function") {
+            accounts = await ethereum.request({ method: "eth_requestAccounts" });
+          } else if (typeof ethereum.enable === "function") {
+            // Fallback for older wallets
+            accounts = await ethereum.enable();
+          } else {
+            throw primaryError; // Re-throw if no alternatives
+          }
+        } catch (altError) {
+          console.error("Alternative method also failed:", altError);
+          throw primaryError;
+        }
       }
       
       if (accounts && accounts.length > 0) {
@@ -178,13 +212,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       console.error("Wallet connection error:", error);
       let errorMessage = error.message || "Could not connect wallet. Please try again.";
       
-      // Handle specific error codes and messages
-      if (error.code === 4001 || error.message?.includes("rejected")) {
+      // Provide helpful error messages
+      if (error.message?.includes("Wallet not detected")) {
+        errorMessage = "Wallet not found. Please install MetaMask, Backpack, or another Web3 wallet extension.";
+      } else if (error.code === 4001 || error.message?.includes("rejected")) {
         errorMessage = "You rejected the connection request.";
       } else if (error.code === -32002 || error.message?.includes("pending")) {
-        errorMessage = "Connection request already pending. Check your wallet extension.";
-      } else if (error.message?.includes("proxy")) {
-        errorMessage = "Wallet connection issue. Try refreshing the page and reconnecting.";
+        errorMessage = "Connection request already pending. Please check your wallet.";
       }
       
       toast({
