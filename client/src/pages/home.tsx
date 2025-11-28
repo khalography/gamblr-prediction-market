@@ -310,12 +310,12 @@ export default function Home() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl">
+          <div className="text-center py-20 text-foreground border border-dashed rounded-xl">
             <Loader2 className="mx-auto h-10 w-10 mb-4 animate-spin text-primary" />
             <p>Please wait while we load available markets.</p>
           </div>
         ) : markets.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl">
+          <div className="text-center py-20 text-foreground border border-dashed rounded-xl">
             <AlertCircle className="mx-auto h-10 w-10 mb-4 opacity-50" />
             <p>No active markets found. Connect wallet to sync.</p>
           </div>
