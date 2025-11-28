@@ -1,6 +1,7 @@
 import { useWeb3 } from "@/lib/web3";
 import { Button } from "@/components/ui/button";
 import { DepositModal } from "./deposit-modal";
+import { WithdrawModal } from "./withdraw-modal";
 import { Wallet, Shield, LogOut, PieChart } from "lucide-react";
 import { Link } from "wouter";
 import {
@@ -32,6 +33,7 @@ export function Navbar() {
               </div>
               
               <DepositModal />
+              <WithdrawModal />
               
               <Link href="/portfolio">
                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" data-testid="link-portfolio">
