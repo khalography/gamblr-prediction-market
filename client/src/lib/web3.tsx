@@ -255,7 +255,33 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const accounts = await provider.send("eth_requestAccounts", []);
       
       if (accounts && accounts.length > 0) {
-        setAccount(accounts[0]);
+        const userAddress = accounts[0];
+        setAccount(userAddress);
+        
+        // Initialize contracts and fetch balances immediately
+        try {
+          const signer = await provider.getSigner();
+          signerRef.current = signer;
+          
+          const gamblr = new ethers.Contract(GAMBLR_ADDRESS, GAMBLR_ABI, signer);
+          const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, signer);
+          
+          contractRef.current = gamblr;
+          usdcContractRef.current = usdc;
+          
+          // Check if owner
+          try {
+            const ownerAddress = await gamblr.owner();
+            setIsOwner(ownerAddress.toLowerCase() === userAddress.toLowerCase());
+          } catch (e) {
+            console.error("Failed to fetch owner:", e);
+          }
+          
+          // Fetch balances
+          await fetchBalances(userAddress, gamblr, usdc);
+        } catch (initError) {
+          console.error("Error initializing contracts:", initError);
+        }
         
         // Save last used wallet
         try {
