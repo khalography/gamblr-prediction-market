@@ -171,35 +171,31 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Request accounts - use a safer method that avoids proxy issues
+      // Request accounts using ethers.js provider.send()
+      // This method avoids proxy issues by not directly accessing ethereum properties
       let accounts: string[] = [];
       
       try {
-        // Try the primary method
         accounts = await provider.send("eth_requestAccounts", []);
-      } catch (primaryError: any) {
-        console.error("Primary eth_requestAccounts failed:", primaryError);
+      } catch (error: any) {
+        console.error("Request accounts error:", error);
         
-        // Check if it's a rejection
-        if (primaryError.code === 4001 || primaryError.message?.includes("rejected")) {
+        // Check if it's a user rejection (code 4001) or other specific errors
+        if (error.code === 4001 || error.message?.includes("rejected")) {
           throw new Error("You rejected the connection request.");
         }
         
-        // Try alternative: directly access ethereum if provider.send failed
-        try {
-          console.log("Trying alternative connection method...");
-          if (typeof ethereum.request === "function") {
-            accounts = await ethereum.request({ method: "eth_requestAccounts" });
-          } else if (typeof ethereum.enable === "function") {
-            // Fallback for older wallets
-            accounts = await ethereum.enable();
-          } else {
-            throw primaryError; // Re-throw if no alternatives
-          }
-        } catch (altError) {
-          console.error("Alternative method also failed:", altError);
-          throw primaryError;
+        if (error.code === -32002 || error.message?.includes("pending")) {
+          throw new Error("Connection request already pending. Please check your wallet.");
         }
+        
+        // For any other error, suggest refreshing
+        if (error.message?.includes("proxy") || error.message?.includes("read-only")) {
+          throw new Error("Wallet connection issue. Please refresh the page and try again.");
+        }
+        
+        // Re-throw with original error
+        throw error;
       }
       
       if (accounts && accounts.length > 0) {
@@ -211,15 +207,6 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error("Wallet connection error:", error);
       let errorMessage = error.message || "Could not connect wallet. Please try again.";
-      
-      // Provide helpful error messages
-      if (error.message?.includes("Wallet not detected")) {
-        errorMessage = "Wallet not found. Please install MetaMask, Backpack, or another Web3 wallet extension.";
-      } else if (error.code === 4001 || error.message?.includes("rejected")) {
-        errorMessage = "You rejected the connection request.";
-      } else if (error.code === -32002 || error.message?.includes("pending")) {
-        errorMessage = "Connection request already pending. Please check your wallet.";
-      }
       
       toast({
         title: "Connection Failed",
