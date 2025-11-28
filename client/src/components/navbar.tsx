@@ -24,10 +24,10 @@ export function Navbar() {
         <div className="flex items-center gap-4">
           {account ? (
             <>
-              <div className="hidden md:flex items-center gap-4 mr-2 text-sm">
+              <div className="flex items-center gap-2 md:gap-4 mr-1 md:mr-2 text-sm">
                 <div className="flex flex-col items-end">
-                  <span className="text-muted-foreground text-xs uppercase tracking-widest">Balance</span>
-                  <span className="font-mono font-bold">{Number(internalBalance).toFixed(2)} USDC</span>
+                  <span className="text-muted-foreground text-[10px] md:text-xs uppercase tracking-widest">Balance</span>
+                  <span className="font-mono font-bold text-sm md:text-base">{Number(internalBalance).toFixed(2)} USDC</span>
                 </div>
               </div>
               
