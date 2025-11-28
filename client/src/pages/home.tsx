@@ -4,6 +4,9 @@ import { Market, MarketCard } from "@/components/market-card";
 import { Navbar } from "@/components/navbar";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ethers } from "ethers";
+import { GAMBLR_ABI, GAMBLR_ADDRESS, ARC_TESTNET_RPC } from "@/lib/gamblr-abi";
+import bannerImage from "@assets/yupp-generated-image-925890_1764331757996.jpg";
 
 // Oracle-verifiable prediction markets
 // These can be settled using price feeds from Chainlink, Pyth, CoinGecko, or other data providers
@@ -189,22 +192,24 @@ const MOCK_MARKETS: Market[] = [
 ];
 
 export default function Home() {
-  const { contract, provider } = useWeb3();
-  const [markets, setMarkets] = useState<Market[]>(MOCK_MARKETS);
-  const [isLoading, setIsLoading] = useState(false);
+  const { contract } = useWeb3();
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchMarkets = async () => {
-      if (!contract) return;
-      
       setIsLoading(true);
       try {
+        // Use read-only provider to fetch markets (works without wallet connection)
+        const readProvider = new ethers.JsonRpcProvider(ARC_TESTNET_RPC);
+        const readContract = new ethers.Contract(GAMBLR_ADDRESS, GAMBLR_ABI, readProvider);
+        
         const fetchedMarkets: Market[] = [];
         
         // Fetch up to 50 markets from the contract
         for (let i = 0; i < 50; i++) {
           try {
-            const m = await contract.markets(i);
+            const m = await readContract.markets(i);
             
             fetchedMarkets.push({
               id: Number(m.id),
@@ -223,8 +228,30 @@ export default function Home() {
         }
 
         if (fetchedMarkets.length > 0) {
-          // Show only on-chain markets when they exist
-          setMarkets(fetchedMarkets);
+          // Remove duplicates by question (keep first occurrence)
+          const seen = new Set<string>();
+          const uniqueMarkets = fetchedMarkets.filter(market => {
+            const key = market.question.toLowerCase().trim();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          
+          // Sort: Earlier resolution dates first, ended markets at the bottom
+          const now = Date.now() / 1000;
+          uniqueMarkets.sort((a, b) => {
+            const aEnded = a.endTime < now;
+            const bEnded = b.endTime < now;
+            
+            // Ended markets go to bottom
+            if (aEnded && !bEnded) return 1;
+            if (!aEnded && bEnded) return -1;
+            
+            // Both active or both ended: sort by end time (earlier first)
+            return a.endTime - b.endTime;
+          });
+          
+          setMarkets(uniqueMarkets);
         } else {
           // Show preview markets only when no on-chain markets exist
           setMarkets(MOCK_MARKETS);
@@ -238,21 +265,28 @@ export default function Home() {
     };
 
     fetchMarkets();
-  }, [contract]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       <Navbar />
       
-      <header className="relative overflow-hidden border-b border-primary/10 py-20 sm:py-32 bg-secondary/20">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-        <div className="absolute left-0 right-0 top-0 -z-10 m-auto h-[310px] w-[310px] rounded-full bg-primary/30 opacity-30 blur-[100px]"></div>
+      <header 
+        className="relative overflow-hidden border-b border-primary/10 py-20 sm:py-32"
+        style={{
+          backgroundImage: `url(${bannerImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      >
+        <div className="absolute inset-0 bg-black/40"></div>
         
         <div className="container relative z-10 text-center px-4">
-          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight mb-6 bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight mb-6 bg-gradient-to-b from-white to-white bg-clip-text text-transparent drop-shadow-lg">
             Welcome to Gamblr!
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+          <p className="text-xl font-bold text-white max-w-2xl mx-auto mb-8 drop-shadow-lg">
             The home of predictions on Arc Testnet. Bet on future outcomes with USDC.
           </p>
           
@@ -275,7 +309,12 @@ export default function Home() {
           {isLoading && <Loader2 className="animate-spin text-primary" />}
         </div>
 
-        {markets.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl">
+            <Loader2 className="mx-auto h-10 w-10 mb-4 animate-spin text-primary" />
+            <p>Please wait while we load available markets.</p>
+          </div>
+        ) : markets.length === 0 ? (
           <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl">
             <AlertCircle className="mx-auto h-10 w-10 mb-4 opacity-50" />
             <p>No active markets found. Connect wallet to sync.</p>
