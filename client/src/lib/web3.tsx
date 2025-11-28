@@ -144,44 +144,47 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
     setIsConnecting(true);
     try {
+      // Create provider from window.ethereum
       const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Get network info
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Try to request accounts (works with most wallets)
+      // Request accounts using the provider method
+      // This is more reliable than calling window.ethereum.request directly
       let accounts: string[] = [];
       
       try {
-        // First try wallet_requestPermissions for wallets that support it
-        await window.ethereum.request({
-          method: "wallet_requestPermissions",
-          params: [{ eth_accounts: {} }]
-        });
-      } catch (permError: any) {
-        // User rejected or method not supported, that's okay
-        if (permError.code !== 4001) {
-          console.warn("Permission request not supported:", permError);
+        accounts = await provider.send("eth_requestAccounts", []);
+      } catch (sendError: any) {
+        console.error("eth_requestAccounts error:", sendError);
+        
+        // If that fails, try using listAccounts as fallback
+        if (sendError.code === 4001 || sendError.message?.includes("rejected")) {
+          throw new Error("You rejected the connection request.");
         }
+        
+        throw sendError;
       }
-
-      // Request accounts
-      accounts = await provider.send("eth_requestAccounts", []);
       
       if (accounts && accounts.length > 0) {
         setAccount(accounts[0]);
       } else {
-        throw new Error("No accounts returned from wallet");
+        throw new Error("No accounts available in wallet");
       }
       
     } catch (error: any) {
-      console.error("Connection error:", error);
-      let errorMessage = error.message || "Could not connect wallet.";
+      console.error("Wallet connection error:", error);
+      let errorMessage = error.message || "Could not connect wallet. Please try again.";
       
-      // Handle specific error codes
-      if (error.code === 4001) {
+      // Handle specific error codes and messages
+      if (error.code === 4001 || error.message?.includes("rejected")) {
         errorMessage = "You rejected the connection request.";
-      } else if (error.code === -32002) {
-        errorMessage = "Connection request already pending. Please check your wallet.";
+      } else if (error.code === -32002 || error.message?.includes("pending")) {
+        errorMessage = "Connection request already pending. Check your wallet extension.";
+      } else if (error.message?.includes("proxy")) {
+        errorMessage = "Wallet connection issue. Try refreshing the page and reconnecting.";
       }
       
       toast({
