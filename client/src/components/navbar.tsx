@@ -1,7 +1,7 @@
 import { useWeb3 } from "@/lib/web3";
 import { Button } from "@/components/ui/button";
 import { DepositModal } from "./deposit-modal";
-import { Wallet, Shield, LogOut } from "lucide-react";
+import { Wallet, Shield, LogOut, PieChart } from "lucide-react";
 import { Link } from "wouter";
 import {
   DropdownMenu,
@@ -17,9 +17,9 @@ export function Navbar() {
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
       <div className="container flex h-16 items-center justify-between px-4">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 cursor-pointer" data-testid="link-home">
           <img src={logoUrl} alt="Gamblr Logo" className="h-10 w-auto object-contain" />
-        </div>
+        </Link>
 
         <div className="flex items-center gap-4">
           {account ? (
@@ -32,6 +32,13 @@ export function Navbar() {
               </div>
               
               <DepositModal />
+              
+              <Link href="/portfolio">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" data-testid="link-portfolio">
+                  <PieChart className="h-4 w-4 mr-1" />
+                  Portfolio
+                </Button>
+              </Link>
               
               {isOwner && (
                 <Link href="/admin">
