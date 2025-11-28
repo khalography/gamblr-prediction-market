@@ -10,13 +10,15 @@ import { GAMBLR_ADDRESS } from "@/lib/gamblr-abi";
 import { Loader2, Wallet } from "lucide-react";
 
 export function DepositModal() {
-  const { contract, usdcContract, account, refreshBalances, walletBalance } = useWeb3();
+  const { getContract, getUsdcContract, account, refreshBalances, walletBalance } = useWeb3();
   const [amount, setAmount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
   const handleDeposit = async () => {
+    const contract = getContract();
+    const usdcContract = getUsdcContract();
     if (!contract || !usdcContract || !amount) return;
 
     setIsLoading(true);
