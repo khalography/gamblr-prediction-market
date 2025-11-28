@@ -10,15 +10,11 @@ declare global {
   }
 }
 
-interface EIP6963ProviderInfo {
+export interface WalletProvider {
   uuid: string;
   name: string;
   icon: string;
   rdns: string;
-}
-
-interface EIP6963ProviderDetail {
-  info: EIP6963ProviderInfo;
   provider: any;
 }
 
@@ -30,12 +26,15 @@ interface Web3ContextType {
   getUsdcContract: () => ethers.Contract | null;
   internalBalance: string;
   walletBalance: string;
-  connectWallet: () => Promise<void>;
+  connectWallet: (selectedProvider?: WalletProvider) => Promise<void>;
   disconnectWallet: () => void;
   refreshBalances: () => Promise<void>;
   isConnecting: boolean;
   chainId: number | null;
   isOwner: boolean;
+  availableWallets: WalletProvider[];
+  showWalletSelector: boolean;
+  setShowWalletSelector: (show: boolean) => void;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -47,6 +46,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [chainId, setChainId] = useState<number | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const [availableWallets, setAvailableWallets] = useState<WalletProvider[]>([]);
+  const [showWalletSelector, setShowWalletSelector] = useState(false);
   const [, forceUpdate] = useState({});
   const { toast } = useToast();
 
@@ -55,7 +56,6 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const contractRef = useRef<ethers.Contract | null>(null);
   const usdcContractRef = useRef<ethers.Contract | null>(null);
   const rawProviderRef = useRef<any>(null);
-  const eip6963ProvidersRef = useRef<EIP6963ProviderDetail[]>([]);
 
   const getProvider = useCallback(() => providerRef.current, []);
   const getSigner = useCallback(() => signerRef.current, []);
@@ -64,24 +64,45 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   // Listen for EIP-6963 wallet announcements
   useEffect(() => {
+    const discoveredWallets: WalletProvider[] = [];
+    
     const handleAnnouncement = (event: any) => {
-      const detail = event.detail as EIP6963ProviderDetail;
-      if (detail && detail.provider) {
-        // Check if already added
-        const exists = eip6963ProvidersRef.current.some(
-          p => p.info.uuid === detail.info.uuid
-        );
+      const detail = event.detail;
+      if (detail && detail.provider && detail.info) {
+        const exists = discoveredWallets.some(p => p.uuid === detail.info.uuid);
         if (!exists) {
-          eip6963ProvidersRef.current.push(detail);
-          console.log("Discovered wallet:", detail.info.name);
+          const wallet: WalletProvider = {
+            uuid: detail.info.uuid,
+            name: detail.info.name,
+            icon: detail.info.icon,
+            rdns: detail.info.rdns || "",
+            provider: detail.provider
+          };
+          discoveredWallets.push(wallet);
+          setAvailableWallets([...discoveredWallets]);
         }
       }
     };
 
     window.addEventListener("eip6963:announceProvider", handleAnnouncement);
-    
-    // Request wallets to announce themselves
     window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+    // Also add legacy window.ethereum as fallback
+    setTimeout(() => {
+      if (discoveredWallets.length === 0 && window.ethereum) {
+        const legacyWallet: WalletProvider = {
+          uuid: "legacy-ethereum",
+          name: window.ethereum.isMetaMask ? "MetaMask" : 
+                window.ethereum.isBackpack ? "Backpack" : 
+                window.ethereum.isCoinbaseWallet ? "Coinbase Wallet" : "Browser Wallet",
+          icon: "",
+          rdns: "",
+          provider: window.ethereum
+        };
+        discoveredWallets.push(legacyWallet);
+        setAvailableWallets([...discoveredWallets]);
+      }
+    }, 500);
 
     return () => {
       window.removeEventListener("eip6963:announceProvider", handleAnnouncement);
@@ -119,7 +140,6 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   }, [account]);
 
-  // Setup event listeners when we have a raw provider
   useEffect(() => {
     const rawProvider = rawProviderRef.current;
     if (!rawProvider) return;
@@ -151,9 +171,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           rawProvider.removeListener("accountsChanged", handleAccountsChanged);
           rawProvider.removeListener("chainChanged", handleChainChanged);
         }
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+      } catch (e) {}
     };
   }, [account]);
 
@@ -189,84 +207,60 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     forceUpdate({});
   };
 
-  // Get the best available wallet provider
-  const getBestProvider = (): any => {
-    // 1. First try EIP-6963 discovered providers
-    if (eip6963ProvidersRef.current.length > 0) {
-      // Prefer Backpack if available
-      const backpack = eip6963ProvidersRef.current.find(
-        p => p.info.name.toLowerCase().includes("backpack") || 
-             p.info.rdns?.includes("backpack")
-      );
-      if (backpack) {
-        console.log("Using EIP-6963 Backpack provider");
-        return backpack.provider;
-      }
-      
-      // Otherwise use first available
-      console.log("Using EIP-6963 provider:", eip6963ProvidersRef.current[0].info.name);
-      return eip6963ProvidersRef.current[0].provider;
+  const connectWallet = async (selectedProvider?: WalletProvider) => {
+    // If no provider selected and multiple wallets available, show selector
+    if (!selectedProvider && availableWallets.length > 1) {
+      setShowWalletSelector(true);
+      return;
     }
 
-    // 2. Try window.backpack (Backpack's specific namespace)
-    if (window.backpack?.isBackpack) {
-      console.log("Using window.backpack provider");
-      return window.backpack;
+    // If no provider selected but only one wallet, use it
+    if (!selectedProvider && availableWallets.length === 1) {
+      selectedProvider = availableWallets[0];
     }
 
-    // 3. Check if window.ethereum has a providers array (multiple wallets)
-    if (window.ethereum?.providers?.length > 0) {
-      // Find Backpack in the providers array
-      const backpack = window.ethereum.providers.find((p: any) => p.isBackpack);
-      if (backpack) {
-        console.log("Using Backpack from providers array");
-        return backpack;
-      }
-      // Fall back to first provider
-      console.log("Using first provider from providers array");
-      return window.ethereum.providers[0];
-    }
-
-    // 4. Fall back to window.ethereum
-    if (window.ethereum) {
-      console.log("Using window.ethereum directly");
-      return window.ethereum;
-    }
-
-    return null;
-  };
-
-  const connectWallet = async () => {
-    setIsConnecting(true);
-    try {
-      // Get the best available provider
-      const rawProvider = getBestProvider();
-      
-      if (!rawProvider) {
+    // If still no provider, check legacy fallbacks
+    if (!selectedProvider) {
+      if (window.ethereum) {
+        selectedProvider = {
+          uuid: "legacy",
+          name: "Browser Wallet",
+          icon: "",
+          rdns: "",
+          provider: window.ethereum
+        };
+      } else {
         toast({
           title: "Wallet not found",
-          description: "Please install MetaMask, Backpack, or another Web3 wallet extension.",
+          description: "Please install a Web3 wallet extension like MetaMask or Backpack.",
           variant: "destructive"
         });
         return;
       }
+    }
 
-      // Store raw provider reference
+    setIsConnecting(true);
+    setShowWalletSelector(false);
+    
+    try {
+      const rawProvider = selectedProvider.provider;
       rawProviderRef.current = rawProvider;
 
-      // Create ethers provider
       const provider = new ethers.BrowserProvider(rawProvider);
       providerRef.current = provider;
       
-      // Get network info
       const network = await provider.getNetwork();
       setChainId(Number(network.chainId));
 
-      // Request accounts
       const accounts = await provider.send("eth_requestAccounts", []);
       
       if (accounts && accounts.length > 0) {
         setAccount(accounts[0]);
+        
+        // Save last used wallet
+        try {
+          localStorage.setItem("lastWallet", selectedProvider.uuid);
+        } catch (e) {}
       } else {
         throw new Error("No accounts available in wallet");
       }
@@ -280,7 +274,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       } else if (error.code === -32002 || error.message?.includes("pending")) {
         errorMessage = "Connection request already pending. Please check your wallet.";
       } else if (error.message?.includes("proxy") || error.message?.includes("read-only")) {
-        errorMessage = "Wallet conflict detected. Try disabling other wallet extensions and refresh the page.";
+        errorMessage = "Wallet conflict detected. Try selecting a different wallet.";
       }
       
       toast({
@@ -307,7 +301,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       refreshBalances,
       isConnecting,
       chainId,
-      isOwner
+      isOwner,
+      availableWallets,
+      showWalletSelector,
+      setShowWalletSelector
     }}>
       {children}
     </Web3Context.Provider>
