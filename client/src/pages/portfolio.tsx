@@ -38,7 +38,7 @@ interface BetPosition {
 }
 
 export default function Portfolio() {
-  const { account, internalBalance, contract } = useWeb3();
+  const { account, internalBalance, getContract } = useWeb3();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [positions, setPositions] = useState<BetPosition[]>([]);
   const [isLoading, setIsLoading] = useState(false);
