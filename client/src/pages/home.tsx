@@ -192,7 +192,7 @@ const MOCK_MARKETS: Market[] = [
 ];
 
 export default function Home() {
-  const { contract } = useWeb3();
+  const { getContract } = useWeb3();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
