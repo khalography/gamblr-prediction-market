@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Web3Provider } from "@/lib/web3";
 import { MobileNav } from "@/components/mobile-nav";
 import { WalletSelector } from "@/components/wallet-selector";
+import { Footer } from "@/components/footer";
 import Home from "@/pages/home.tsx";
 import Admin from "@/pages/admin.tsx";
 import Portfolio from "@/pages/portfolio.tsx";
@@ -28,7 +29,10 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Web3Provider>
-          <Router />
+          <div className="min-h-screen flex flex-col">
+            <Router />
+            <Footer />
+          </div>
           <MobileNav />
           <WalletSelector />
         </Web3Provider>
