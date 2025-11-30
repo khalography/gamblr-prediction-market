@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useWeb3 } from "@/lib/web3";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, CheckCircle, AlertCircle, Shield } from "lucide-react";
+import { Loader2, Plus, CheckCircle, AlertCircle, Shield, RefreshCw, Link2, Trophy } from "lucide-react";
 import { format } from "date-fns";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface PreviewMarket {
   question: string;
@@ -16,17 +18,17 @@ interface PreviewMarket {
 }
 
 const PREVIEW_MARKETS: PreviewMarket[] = [
-  // EPL THIS WEEKEND (Nov 29-30, 2025)
-  { question: "Will Manchester City beat Leeds United this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
-  { question: "Will Everton beat Newcastle United this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
-  { question: "Will Tottenham beat Fulham this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
-  { question: "Will Brentford beat Burnley this weekend?", endDate: "2025-11-29", oracle: "Premier League Results" },
-  { question: "Will Manchester United beat Crystal Palace this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
-  { question: "Will Liverpool beat West Ham this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
-  { question: "Will Arsenal beat Chelsea in the London Derby?", endDate: "2025-11-30", oracle: "Premier League Results" },
-  { question: "Will Chelsea beat Arsenal in the London Derby?", endDate: "2025-11-30", oracle: "Premier League Results" },
-  { question: "Will Aston Villa beat Wolverhampton this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
-  { question: "Will Nottingham Forest beat Brighton this weekend?", endDate: "2025-11-30", oracle: "Premier League Results" },
+  // EPL NEXT WEEK (Dec 3-4, 2025) - Matchweek 14
+  { question: "Will Manchester City beat Leeds United?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
+  { question: "Will Everton beat Newcastle United?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
+  { question: "Will Tottenham beat Fulham?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
+  { question: "Will Brentford beat Burnley?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Manchester United beat Crystal Palace?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Liverpool beat West Ham?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Arsenal beat Chelsea in the London Derby?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Chelsea beat Arsenal in the London Derby?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Aston Villa beat Wolverhampton?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
+  { question: "Will Nottingham Forest beat Brighton?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
   // POLITICS - GERMANY (Feb 2025)
   { question: "Will AfD become the largest party in German Bundestag?", endDate: "2025-02-23", oracle: "Bundeswahlleiter Results" },
   // POLITICS - CANADA (Oct 2025)
@@ -71,14 +73,140 @@ const PREVIEW_MARKETS: PreviewMarket[] = [
   { question: "Will Ethereum complete Verkle Trees upgrade in 2026?", endDate: "2026-12-31", oracle: "Ethereum.org Updates" },
 ];
 
+interface SportsEvent {
+  id: string;
+  externalId: string;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  matchDate: string;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+}
+
+interface OnChainMarket {
+  id: number;
+  question: string;
+  endTime: number;
+  resolved: boolean;
+}
+
 export default function Admin() {
   const { getContract, account } = useWeb3();
   const isConnected = !!account;
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState<string | null>(null);
   const [createdMarkets, setCreatedMarkets] = useState<Set<number>>(new Set());
   const [customQuestion, setCustomQuestion] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedMarketId, setSelectedMarketId] = useState<string>("");
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [selectedBetType, setSelectedBetType] = useState<string>("");
+  const [onChainMarkets, setOnChainMarkets] = useState<OnChainMarket[]>([]);
+  const [loadingMarkets, setLoadingMarkets] = useState(false);
+
+  const { data: sportsEvents = [], isLoading: eventsLoading, refetch: refetchEvents } = useQuery<SportsEvent[]>({
+    queryKey: ["sportsEvents"],
+    queryFn: async () => {
+      const res = await fetch("/api/sports/upcoming");
+      if (!res.ok) throw new Error("Failed to fetch sports events");
+      return res.json();
+    },
+  });
+
+  const { data: linkedMarkets = [] } = useQuery({
+    queryKey: ["linkedMarkets"],
+    queryFn: async () => {
+      const res = await fetch("/api/markets/linked");
+      if (!res.ok) throw new Error("Failed to fetch linked markets");
+      return res.json();
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/sports/sync", { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to sync");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Synced!", description: "Sports fixtures updated from API-Football" });
+      queryClient.invalidateQueries({ queryKey: ["sportsEvents"] });
+      refetchEvents();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Sync Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: async ({ marketId, eventId, betType }: { marketId: number; eventId: string; betType: string }) => {
+      const res = await fetch(`/api/markets/${marketId}/link-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, betType }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to link");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Linked!", description: "Market linked to sports event for auto-resolution" });
+      queryClient.invalidateQueries({ queryKey: ["linkedMarkets"] });
+      setSelectedMarketId("");
+      setSelectedEventId("");
+      setSelectedBetType("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Link Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const loadOnChainMarkets = async () => {
+    const contract = getContract();
+    if (!contract) return;
+
+    setLoadingMarkets(true);
+    try {
+      const markets: OnChainMarket[] = [];
+      for (let i = 0; i < 50; i++) {
+        try {
+          const market = await contract.markets(i);
+          if (market.question && market.question !== "") {
+            markets.push({
+              id: i,
+              question: market.question,
+              endTime: Number(market.endTime),
+              resolved: market.isResolved,
+            });
+          }
+        } catch {
+          break;
+        }
+      }
+      setOnChainMarkets(markets);
+    } catch (error) {
+      console.error("Error loading markets:", error);
+    } finally {
+      setLoadingMarkets(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isConnected) {
+      loadOnChainMarkets();
+    }
+  }, [isConnected]);
+
+  const upcomingEvents = sportsEvents;
+  const linkedMarketIds = new Set(linkedMarkets.map((l: any) => l.marketEvent.marketId));
 
   const createMarket = async (question: string, endDateStr: string, index?: number) => {
     const contract = getContract();
@@ -115,6 +243,8 @@ export default function Admin() {
         setCustomQuestion("");
         setCustomEndDate("");
       }
+      
+      loadOnChainMarkets();
     } catch (error: any) {
       console.error("Create market error:", error);
       let message = "Failed to create market";
@@ -195,13 +325,13 @@ export default function Admin() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
+                <Label htmlFor="endDate">End Date & Time</Label>
                 <Input
                   id="endDate"
-                  type="date"
+                  type="datetime-local"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  min={format(new Date(), "yyyy-MM-dd")}
+                  min={format(new Date(), "yyyy-MM-dd'T'HH:mm")}
                   data-testid="input-custom-end-date"
                 />
               </div>
@@ -266,7 +396,7 @@ export default function Admin() {
                       <div className="flex-1">
                         <p className="font-medium">{market.question}</p>
                         <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                          <span>Ends: {format(new Date(market.endDate), "MMM d, yyyy")}</span>
+                          <span>Ends: {format(new Date(market.endDate), "MMM d, yyyy 'at' h:mm a")}</span>
                           <span>Oracle: {market.oracle}</span>
                         </div>
                       </div>
@@ -297,6 +427,185 @@ export default function Admin() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5" />
+                  Sports Auto-Resolution
+                </CardTitle>
+                <CardDescription>
+                  Link markets to Premier League fixtures for automatic resolution
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                data-testid="button-sync-sports"
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Sync Fixtures
+                  </>
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>On-Chain Market</Label>
+                  <Select value={selectedMarketId} onValueChange={setSelectedMarketId}>
+                    <SelectTrigger data-testid="select-market">
+                      <SelectValue placeholder="Select a market..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loadingMarkets ? (
+                        <SelectItem value="loading" disabled>Loading markets...</SelectItem>
+                      ) : onChainMarkets.filter(m => !m.resolved && !linkedMarketIds.has(m.id)).length === 0 ? (
+                        <SelectItem value="none" disabled>No unlinked markets</SelectItem>
+                      ) : (
+                        onChainMarkets
+                          .filter(m => !m.resolved && !linkedMarketIds.has(m.id))
+                          .map(m => (
+                            <SelectItem key={m.id} value={String(m.id)}>
+                              #{m.id}: {m.question.slice(0, 40)}...
+                            </SelectItem>
+                          ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sports Event</Label>
+                  <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+                    <SelectTrigger data-testid="select-event">
+                      <SelectValue placeholder="Select a match..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventsLoading ? (
+                        <SelectItem value="loading" disabled>Loading events...</SelectItem>
+                      ) : upcomingEvents.length === 0 ? (
+                        <SelectItem value="none" disabled>No upcoming matches</SelectItem>
+                      ) : (
+                        upcomingEvents.map(e => (
+                          <SelectItem key={e.id} value={e.id}>
+                            {e.homeTeam} vs {e.awayTeam} ({format(new Date(e.matchDate), "MMM d")})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bet Type</Label>
+                  <Select value={selectedBetType} onValueChange={setSelectedBetType}>
+                    <SelectTrigger data-testid="select-bet-type">
+                      <SelectValue placeholder="Select outcome..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="home_win">Home Team Wins</SelectItem>
+                      <SelectItem value="away_win">Away Team Wins</SelectItem>
+                      <SelectItem value="draw">Draw</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => linkMutation.mutate({
+                  marketId: parseInt(selectedMarketId),
+                  eventId: selectedEventId,
+                  betType: selectedBetType,
+                })}
+                disabled={!selectedMarketId || !selectedEventId || !selectedBetType || linkMutation.isPending}
+                className="w-full"
+                data-testid="button-link-market"
+              >
+                {linkMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Linking...
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-4 h-4 mr-2" />
+                    Link Market to Event
+                  </>
+                )}
+              </Button>
+
+              {linkedMarkets.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Linked Markets ({linkedMarkets.length})</h4>
+                  <div className="space-y-2">
+                    {linkedMarkets.map((link: any) => (
+                      <div
+                        key={link.marketEvent.id}
+                        className="p-3 rounded-lg border bg-card/50 text-sm"
+                        data-testid={`linked-market-${link.marketEvent.marketId}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-medium">Market #{link.marketEvent.marketId}</span>
+                            <span className="text-muted-foreground mx-2">→</span>
+                            <span>{link.sportsEvent.homeTeam} vs {link.sportsEvent.awayTeam}</span>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            link.marketEvent.resolved 
+                              ? "bg-green-500/10 text-green-500" 
+                              : link.sportsEvent.status === "FT"
+                                ? "bg-yellow-500/10 text-yellow-500"
+                                : "bg-blue-500/10 text-blue-500"
+                          }`}>
+                            {link.marketEvent.resolved 
+                              ? "Resolved" 
+                              : link.sportsEvent.status === "FT"
+                                ? "Pending Resolution"
+                                : "Waiting for Match"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Bet: {link.marketEvent.betType.replace("_", " ")} | 
+                          {link.sportsEvent.status === "FT" 
+                            ? ` Final: ${link.sportsEvent.homeScore} - ${link.sportsEvent.awayScore}`
+                            : ` Match: ${format(new Date(link.sportsEvent.matchDate), "MMM d, h:mm a")}`
+                          }
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {upcomingEvents.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-medium mb-3">Upcoming Fixtures ({upcomingEvents.length})</h4>
+                  <div className="grid gap-2 max-h-64 overflow-y-auto">
+                    {upcomingEvents.slice(0, 10).map(event => (
+                      <div
+                        key={event.id}
+                        className="p-3 rounded-lg border bg-card/50 flex justify-between items-center text-sm"
+                        data-testid={`sports-event-${event.id}`}
+                      >
+                        <span className="font-medium">{event.homeTeam} vs {event.awayTeam}</span>
+                        <span className="text-muted-foreground">
+                          {format(new Date(event.matchDate), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="border-yellow-500/30 bg-yellow-500/5">
             <CardContent className="pt-6">
               <div className="flex gap-3">
@@ -308,6 +617,7 @@ export default function Admin() {
                     <li>Each market creation requires a transaction on Arc testnet</li>
                     <li>Make sure you have enough testnet ETH for gas fees</li>
                     <li>Markets cannot be deleted once created</li>
+                    <li>Sports markets are auto-resolved when matches finish (every 5 minutes)</li>
                   </ul>
                 </div>
               </div>
