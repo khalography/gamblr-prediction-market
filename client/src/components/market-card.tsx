@@ -75,7 +75,7 @@ export function MarketCard({ market }: { market: Market }) {
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>Ends {format(new Date(market.endTime * 1000), "MMM d, yyyy")}</span>
+              <span>Ends {format(new Date(market.endTime * 1000), "MMM d, yyyy 'at' h:mm a")}</span>
             </div>
             {market.oracle && (
               <div className="flex items-center gap-1 text-primary/80">
