@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
-import { app } from "../server/app.js";
-import { registerRoutes } from "../server/routes.js";
+import { app } from "../server/app";
+import { registerRoutes } from "../server/routes";
 
 // Ensure NODE_ENV is set to production for serverless build context
 process.env.NODE_ENV = "production";
