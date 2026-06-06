@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sportsEvents, marketEvents } from "@shared/schema";
+import { sportsEvents, marketEvents, marketRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { 
   syncFixtures, 
@@ -11,6 +11,7 @@ import {
   getUnresolvedMarketEvents 
 } from "./sports-api";
 import { runResolutionCycle, startResolutionWorker } from "./resolution-worker";
+import { circleService } from "./circle";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sports/events", async (req, res) => {
@@ -85,6 +86,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/markets/request", async (req, res) => {
+    try {
+      const { title, category, description } = req.body;
+      if (!title || !category) {
+        return res.status(400).json({ error: "title and category are required" });
+      }
+      const [newRequest] = await db
+        .insert(marketRequests)
+        .values({
+          title,
+          category,
+          description: description || null
+        })
+        .returning();
+      res.json(newRequest);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/resolution/run", async (req, res) => {
     try {
       const apiKey = process.env.API_FOOTBALL_KEY;
@@ -112,7 +133,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  if (process.env.API_FOOTBALL_KEY && process.env.OWNER_PRIVATE_KEY) {
+  // Circle Web3 Programmable Wallets endpoints
+  app.post("/api/circle/user", async (req, res) => {
+    try {
+      const { username } = req.body;
+      if (!username) {
+        return res.status(400).json({ error: "Username is required" });
+      }
+      await circleService.createUser(username);
+      const tokenResponse = await circleService.createUserToken(username);
+      const wallets = await circleService.getUserWallets(username);
+      const walletAddress = wallets.length > 0 ? wallets[0].address : null;
+      res.json({
+        ...tokenResponse,
+        appId: process.env.CIRCLE_APP_ID || "mock-app-id",
+        walletAddress
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/circle/challenge", async (req, res) => {
+    try {
+      const { userToken, contractAddress, abiFunctionSignature, abiParameters } = req.body;
+      if (!userToken || !contractAddress || !abiFunctionSignature || !abiParameters) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const challengeResponse = await circleService.createContractExecutionChallenge({
+        userId: userToken,
+        contractAddress,
+        abiFunctionSignature,
+        abiParameters
+      });
+      res.json(challengeResponse);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  if (process.env.API_FOOTBALL_KEY && process.env.OWNER_PRIVATE_KEY && !process.env.VERCEL) {
     console.log("[Server] Starting resolution worker...");
     startResolutionWorker(
       process.env.API_FOOTBALL_KEY,
@@ -120,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       5
     );
   } else {
-    console.log("[Server] Resolution worker not started - missing API keys");
+    console.log("[Server] Resolution worker not started - missing API keys or running in serverless environment");
   }
 
   const httpServer = createServer(app);

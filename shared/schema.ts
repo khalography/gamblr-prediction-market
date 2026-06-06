@@ -34,6 +34,14 @@ export const marketEvents = pgTable("market_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const marketRequests = pgTable("market_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -52,9 +60,16 @@ export const insertMarketEventSchema = createInsertSchema(marketEvents).omit({
   createdAt: true,
 });
 
+export const insertMarketRequestSchema = createInsertSchema(marketRequests).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type SportsEvent = typeof sportsEvents.$inferSelect;
 export type InsertSportsEvent = z.infer<typeof insertSportsEventSchema>;
 export type MarketEvent = typeof marketEvents.$inferSelect;
 export type InsertMarketEvent = z.infer<typeof insertMarketEventSchema>;
+export type MarketRequest = typeof marketRequests.$inferSelect;
+export type InsertMarketRequest = z.infer<typeof insertMarketRequestSchema>;

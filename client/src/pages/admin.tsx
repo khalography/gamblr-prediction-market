@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useWeb3 } from "@/lib/web3";
+import { ethers } from "ethers";
+import { ARC_TESTNET_RPC, GAMBLR_ADDRESS, GAMBLR_ABI } from "@/lib/gamblr-abi";
 import { Navbar } from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,21 +20,6 @@ interface PreviewMarket {
 }
 
 const PREVIEW_MARKETS: PreviewMarket[] = [
-  // EPL NEXT WEEK (Dec 3-4, 2025) - Matchweek 14
-  { question: "Will Manchester City beat Leeds United?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
-  { question: "Will Everton beat Newcastle United?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
-  { question: "Will Tottenham beat Fulham?", endDate: "2025-12-03T22:00", oracle: "Premier League Results" },
-  { question: "Will Brentford beat Burnley?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Manchester United beat Crystal Palace?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Liverpool beat West Ham?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Arsenal beat Chelsea in the London Derby?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Chelsea beat Arsenal in the London Derby?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Aston Villa beat Wolverhampton?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  { question: "Will Nottingham Forest beat Brighton?", endDate: "2025-12-04T22:00", oracle: "Premier League Results" },
-  // POLITICS - GERMANY (Feb 2025)
-  { question: "Will AfD become the largest party in German Bundestag?", endDate: "2025-02-23", oracle: "Bundeswahlleiter Results" },
-  // POLITICS - CANADA (Oct 2025)
-  { question: "Will the Conservative Party win Canada's Federal Election?", endDate: "2025-10-20", oracle: "Elections Canada Results" },
   // SUPER BOWL LX (Feb 2026)
   { question: "Will the Kansas City Chiefs win Super Bowl LX (2026)?", endDate: "2026-02-08", oracle: "NFL Official Results" },
   { question: "Will Patrick Mahomes win Super Bowl LX MVP?", endDate: "2026-02-08", oracle: "NFL Official Results" },
@@ -92,6 +79,24 @@ interface OnChainMarket {
   resolved: boolean;
 }
 
+const parseMarketIdFromReceipt = (receipt: any, contract: any) => {
+  if (!receipt || !receipt.logs) return null;
+  for (const log of receipt.logs) {
+    try {
+      const parsed = contract.interface.parseLog({
+        topics: [...log.topics],
+        data: log.data
+      });
+      if (parsed && parsed.name === "MarketCreated") {
+        return Number(parsed.args[0]);
+      }
+    } catch (e) {
+      // ignore parsing errors for other contract logs
+    }
+  }
+  return null;
+};
+
 export default function Admin() {
   const { getContract, account } = useWeb3();
   const isConnected = !!account;
@@ -101,11 +106,18 @@ export default function Admin() {
   const [createdMarkets, setCreatedMarkets] = useState<Set<number>>(new Set());
   const [customQuestion, setCustomQuestion] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<string>("");
+  const [deployEventId, setDeployEventId] = useState<string>("");
+  const [deployStatus, setDeployStatus] = useState<string>("");
+  const [isDeploying3Way, setIsDeploying3Way] = useState(false);
   const [selectedMarketId, setSelectedMarketId] = useState<string>("");
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [selectedBetType, setSelectedBetType] = useState<string>("");
   const [onChainMarkets, setOnChainMarkets] = useState<OnChainMarket[]>([]);
   const [loadingMarkets, setLoadingMarkets] = useState(false);
+  const [resolveMarketId, setResolveMarketId] = useState<string>("");
+  const [resolveOutcome, setResolveOutcome] = useState<string>("");
+  const [isResolving, setIsResolving] = useState(false);
 
   const { data: sportsEvents = [], isLoading: eventsLoading, refetch: refetchEvents } = useQuery<SportsEvent[]>({
     queryKey: ["sportsEvents"],
@@ -169,33 +181,185 @@ export default function Admin() {
     },
   });
 
-  const loadOnChainMarkets = async () => {
+  const deploy3WayMarkets = async () => {
     const contract = getContract();
-    if (!contract) return;
+    const event = sportsEvents.find((e: any) => e.id === deployEventId);
+    if (!contract || !event) {
+      toast({ title: "Error", description: "Missing contract or event connection", variant: "destructive" });
+      return;
+    }
 
+    setIsDeploying3Way(true);
+    setDeployStatus("Initiating deployment...");
+
+    try {
+      const matchDate = new Date(event.matchDate);
+      const now = new Date();
+      const durationSeconds = Math.floor((matchDate.getTime() - now.getTime()) / 1000);
+
+      if (durationSeconds <= 0) {
+        throw new Error("Match has already started or ended");
+      }
+
+      // Step 1: Deploy Home Win Market
+      setDeployStatus(`Deploying Home Win: "Will ${event.homeTeam} beat ${event.awayTeam}?"...`);
+      const homeTx = await contract.createMarket(`Will ${event.homeTeam} beat ${event.awayTeam}?`, durationSeconds);
+      setDeployStatus("Confirming Home Win market transaction...");
+      const homeReceipt = await homeTx.wait();
+      const homeMarketId = parseMarketIdFromReceipt(homeReceipt, contract);
+      if (homeMarketId === null) throw new Error("Failed to parse Home Win market ID");
+
+      setDeployStatus("Linking Home Win market in database...");
+      await linkMutation.mutateAsync({
+        marketId: homeMarketId,
+        eventId: event.id,
+        betType: "home_win"
+      });
+
+      // Step 2: Deploy Draw Market
+      setDeployStatus(`Deploying Draw: "Will ${event.homeTeam} vs ${event.awayTeam} end in a draw?"...`);
+      const drawTx = await contract.createMarket(`Will ${event.homeTeam} vs ${event.awayTeam} end in a draw?`, durationSeconds);
+      setDeployStatus("Confirming Draw market transaction...");
+      const drawReceipt = await drawTx.wait();
+      const drawMarketId = parseMarketIdFromReceipt(drawReceipt, contract);
+      if (drawMarketId === null) throw new Error("Failed to parse Draw market ID");
+
+      setDeployStatus("Linking Draw market in database...");
+      await linkMutation.mutateAsync({
+        marketId: drawMarketId,
+        eventId: event.id,
+        betType: "draw"
+      });
+
+      // Step 3: Deploy Away Win Market
+      setDeployStatus(`Deploying Away Win: "Will ${event.awayTeam} beat ${event.homeTeam}?"...`);
+      const awayTx = await contract.createMarket(`Will ${event.awayTeam} beat ${event.homeTeam}?`, durationSeconds);
+      setDeployStatus("Confirming Away Win market transaction...");
+      const awayReceipt = await awayTx.wait();
+      const awayMarketId = parseMarketIdFromReceipt(awayReceipt, contract);
+      if (awayMarketId === null) throw new Error("Failed to parse Away Win market ID");
+
+      setDeployStatus("Linking Away Win market in database...");
+      await linkMutation.mutateAsync({
+        marketId: awayMarketId,
+        eventId: event.id,
+        betType: "away_win"
+      });
+
+      toast({
+        title: "3-Way Markets Live!",
+        description: `Successfully deployed and linked all 3 markets for ${event.homeTeam} vs ${event.awayTeam}.`
+      });
+      setDeployEventId("");
+      setDeployStatus("");
+      loadOnChainMarkets();
+    } catch (error: any) {
+      console.error("3-way deployment error:", error);
+      toast({
+        title: "Deployment Failed",
+        description: error.message || "Failed to deploy all markets",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeploying3Way(false);
+    }
+  };
+
+  const loadOnChainMarkets = async () => {
     setLoadingMarkets(true);
     try {
-      const markets: OnChainMarket[] = [];
-      for (let i = 0; i < 50; i++) {
+      const provider = new ethers.JsonRpcProvider(ARC_TESTNET_RPC);
+      const contract = new ethers.Contract(GAMBLR_ADDRESS, GAMBLR_ABI, provider);
+      
+      // Probe for the latest market ID by binary search (avoids concurrent RPC spam)
+      let low = 0;
+      let high = 2000;
+      let latestId = 0;
+      
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
         try {
-          const market = await contract.markets(i);
-          if (market.question && market.question !== "") {
-            markets.push({
-              id: i,
-              question: market.question,
-              endTime: Number(market.endTime),
-              resolved: market.isResolved,
-            });
+          const m = await contract.markets(mid);
+          if (m && m.question && m.question !== "") {
+            latestId = mid;
+            low = mid + 1;
+          } else {
+            high = mid - 1;
           }
         } catch {
-          break;
+          high = mid - 1;
+        }
+      }
+
+      const markets: OnChainMarket[] = [];
+      const startId = Math.max(0, latestId - 49);
+      const fetchIdsList = Array.from({ length: latestId - startId + 1 }, (_, i) => latestId - i);
+
+      const batchSize = 10;
+      for (let i = 0; i < fetchIdsList.length; i += batchSize) {
+        const batch = fetchIdsList.slice(i, i + batchSize);
+        const marketResults = await Promise.allSettled(
+          batch.map(id => contract.markets(id))
+        );
+
+        for (let j = 0; j < batch.length; j++) {
+          const res = marketResults[j];
+          const mId = batch[j];
+          if (res.status === "fulfilled") {
+            const market = res.value;
+            if (market && market.question && market.question !== "") {
+              markets.push({
+                id: mId,
+                question: market.question,
+                endTime: Number(market.endTime),
+                resolved: market.isResolved,
+              });
+            }
+          }
         }
       }
       setOnChainMarkets(markets);
     } catch (error) {
-      console.error("Error loading markets:", error);
+      console.error("Error loading markets from RPC:", error);
     } finally {
       setLoadingMarkets(false);
+    }
+  };
+
+  const handleResolveMarket = async () => {
+    const contract = getContract();
+    if (!contract || !resolveMarketId || !resolveOutcome) {
+      toast({ title: "Error", description: "Missing contract, market, or outcome selection", variant: "destructive" });
+      return;
+    }
+
+    setIsResolving(true);
+    try {
+      const tx = await contract.resolveMarket(parseInt(resolveMarketId), parseInt(resolveOutcome));
+      toast({ title: "Transaction Sent", description: "Waiting for confirmation..." });
+      await tx.wait();
+
+      toast({
+        title: "Market Resolved!",
+        description: `Successfully resolved market #${resolveMarketId} with outcome ${resolveOutcome === "1" ? "YES" : resolveOutcome === "2" ? "NO" : "VOID"}.`
+      });
+
+      setResolveMarketId("");
+      setResolveOutcome("");
+      loadOnChainMarkets();
+    } catch (error: any) {
+      console.error("Resolve market error:", error);
+      let message = "Failed to resolve market";
+      if (error.message?.includes("OwnableUnauthorizedAccount")) {
+        message = "Only the contract owner can resolve markets. Please connect with the owner wallet.";
+      } else if (error.message?.includes("user rejected")) {
+        message = "Transaction was rejected";
+      } else if (error.reason) {
+        message = error.reason;
+      }
+      toast({ title: "Error", description: message, variant: "destructive" });
+    } finally {
+      setIsResolving(false);
     }
   };
 
@@ -361,7 +525,7 @@ export default function Admin() {
               <div>
                 <CardTitle>Preview Markets</CardTitle>
                 <CardDescription>
-                  Deploy these pre-configured markets to the contract
+                  Deploy pre-configured 2026 markets to the contract
                 </CardDescription>
               </div>
               <Button
@@ -380,50 +544,188 @@ export default function Admin() {
                 )}
               </Button>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {PREVIEW_MARKETS.map((market, index) => (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg border ${
-                      createdMarkets.has(index)
-                        ? "bg-primary/5 border-primary/30"
-                        : "bg-card/50"
-                    }`}
-                    data-testid={`preview-market-${index}`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-medium">{market.question}</p>
-                        <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                          <span>Ends: {format(new Date(market.endDate), "MMM d, yyyy 'at' h:mm a")}</span>
-                          <span>Oracle: {market.oracle}</span>
-                        </div>
-                      </div>
-                      {createdMarkets.has(index) ? (
-                        <div className="flex items-center gap-2 text-primary">
-                          <CheckCircle className="w-5 h-5" />
-                          <span className="text-sm font-medium">Created</span>
-                        </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => createMarket(market.question, market.endDate, index)}
-                          disabled={loading !== null}
-                          data-testid={`button-create-market-${index}`}
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select Preview Market</Label>
+                <Select value={selectedPreviewIndex} onValueChange={setSelectedPreviewIndex}>
+                  <SelectTrigger data-testid="select-preview-market">
+                    <SelectValue placeholder="Choose a market to deploy..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PREVIEW_MARKETS.map((market, index) => {
+                      const isCreated = createdMarkets.has(index);
+                      return (
+                        <SelectItem 
+                          key={index} 
+                          value={String(index)}
+                          disabled={isCreated}
                         >
-                          {loading === `market-${index}` ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            "Create"
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                          {market.question} {isCreated ? "✓ (Created)" : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
+
+              {selectedPreviewIndex !== "" && (
+                <div className="text-xs space-y-1.5 p-3.5 rounded-lg border border-primary/10 bg-primary/5">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Oracle Verification:</span>
+                    <span className="font-semibold text-primary">{PREVIEW_MARKETS[Number(selectedPreviewIndex)].oracle}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Target Resolution Date:</span>
+                    <span className="font-semibold text-primary">
+                      {format(new Date(PREVIEW_MARKETS[Number(selectedPreviewIndex)].endDate), "MMM d, yyyy 'at' h:mm a")}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={() => {
+                  const idx = Number(selectedPreviewIndex);
+                  createMarket(PREVIEW_MARKETS[idx].question, PREVIEW_MARKETS[idx].endDate, idx);
+                  setSelectedPreviewIndex("");
+                }}
+                disabled={selectedPreviewIndex === "" || loading !== null}
+                className="w-full"
+                data-testid="button-deploy-preview-market"
+              >
+                {loading === `market-${selectedPreviewIndex}` ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deploying...
+                  </>
+                ) : (
+                  <>Deploy Selected Market</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-primary" />
+                Deploy & Link 3-Way Game Markets
+              </CardTitle>
+              <CardDescription>
+                Select a synced sports fixture to automatically deploy and link all three markets (Home Win, Draw, Away Win) on-chain and in the DB.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Sports Event</Label>
+                <Select value={deployEventId} onValueChange={setDeployEventId} disabled={isDeploying3Way}>
+                  <SelectTrigger data-testid="select-deploy-event">
+                    <SelectValue placeholder="Select a match..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventsLoading ? (
+                      <SelectItem value="loading" disabled>Loading events...</SelectItem>
+                    ) : upcomingEvents.length === 0 ? (
+                      <SelectItem value="none" disabled>No upcoming matches</SelectItem>
+                    ) : (
+                      upcomingEvents.map(e => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.homeTeam} vs {e.awayTeam} ({format(new Date(e.matchDate), "MMM d")})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {deployStatus && (
+                <div className="p-3.5 rounded-lg border border-primary/20 bg-primary/5 text-xs text-primary font-mono animate-pulse">
+                  {deployStatus}
+                </div>
+              )}
+
+              <Button
+                onClick={deploy3WayMarkets}
+                disabled={deployEventId === "" || isDeploying3Way}
+                className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold"
+                data-testid="button-deploy-3way"
+              >
+                {isDeploying3Way ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deploying 3 Markets...
+                  </>
+                ) : (
+                  <>Deploy & Link 3-Way Markets</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-primary" />
+                Resolve On-Chain Markets
+              </CardTitle>
+              <CardDescription>
+                Manually resolve standalone or custom prediction markets. This transaction must be signed by the contract owner.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select Market</Label>
+                <Select value={resolveMarketId} onValueChange={setResolveMarketId} disabled={isResolving}>
+                  <SelectTrigger data-testid="select-resolve-market">
+                    <SelectValue placeholder="Select an unresolved market..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingMarkets ? (
+                      <SelectItem value="loading" disabled>Loading markets...</SelectItem>
+                    ) : onChainMarkets.filter(m => !m.resolved).length === 0 ? (
+                      <SelectItem value="none" disabled>No unresolved markets</SelectItem>
+                    ) : (
+                      onChainMarkets
+                        .filter(m => !m.resolved)
+                        .map(m => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            #{m.id}: {m.question.slice(0, 50)}...
+                          </SelectItem>
+                        ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Outcome</Label>
+                <Select value={resolveOutcome} onValueChange={setResolveOutcome} disabled={isResolving}>
+                  <SelectTrigger data-testid="select-resolve-outcome">
+                    <SelectValue placeholder="Select resolution outcome..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">YES (Market resolves to true)</SelectItem>
+                    <SelectItem value="2">NO (Market resolves to false)</SelectItem>
+                    <SelectItem value="3">VOID (Market was cancelled/voided)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handleResolveMarket}
+                disabled={resolveMarketId === "" || resolveOutcome === "" || isResolving}
+                className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold"
+                data-testid="button-resolve-market"
+              >
+                {isResolving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Resolving Market...
+                  </>
+                ) : (
+                  <>Resolve Market</>
+                )}
+              </Button>
             </CardContent>
           </Card>
 

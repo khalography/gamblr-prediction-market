@@ -14,9 +14,10 @@ interface BetModalProps {
   marketId: number;
   question: string;
   isYes: boolean;
+  outcomeName?: string;
 }
 
-export function BetModal({ isOpen, onClose, marketId, question, isYes }: BetModalProps) {
+export function BetModal({ isOpen, onClose, marketId, question, isYes, outcomeName }: BetModalProps) {
   const { getContract, internalBalance, refreshBalances } = useWeb3();
   const [amount, setAmount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +37,7 @@ export function BetModal({ isOpen, onClose, marketId, question, isYes }: BetModa
 
       toast({
         title: "Bet Placed!",
-        description: `You bet ${amount} USDC on ${isYes ? "YES" : "NO"}.`,
+        description: `You bet ${amount} USDC on ${outcomeName || (isYes ? "YES" : "NO")}.`,
       });
       
       setAmount("");
@@ -69,7 +70,7 @@ export function BetModal({ isOpen, onClose, marketId, question, isYes }: BetModa
           <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
              <span className="font-medium">Prediction</span>
              <span className={`font-bold ${isYes ? "text-primary" : "text-red-500"}`}>
-               {isYes ? "YES" : "NO"}
+               {outcomeName || (isYes ? "YES" : "NO")}
              </span>
           </div>
 

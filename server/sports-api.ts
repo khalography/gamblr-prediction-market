@@ -50,6 +50,28 @@ export async function fetchEPLFixtures(apiKey: string): Promise<APIFixture[]> {
   return data.response || [];
 }
 
+export async function fetchWorldCupFixtures(apiKey: string): Promise<APIFixture[]> {
+  const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  const response = await fetch(
+    `${API_FOOTBALL_BASE}/fixtures?league=1&season=2026&from=${lastWeek}&to=${nextWeek}`,
+    {
+      headers: {
+        'x-rapidapi-host': 'v3.football.api-sports.io',
+        'x-rapidapi-key': apiKey,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`API-Football World Cup error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.response || [];
+}
+
 export async function fetchFixtureById(apiKey: string, fixtureId: string): Promise<APIFixture | null> {
   const response = await fetch(
     `${API_FOOTBALL_BASE}/fixtures?id=${fixtureId}`,
@@ -93,7 +115,16 @@ export async function refreshLinkedFixtures(apiKey: string): Promise<void> {
 }
 
 export async function syncFixtures(apiKey: string): Promise<void> {
-  const fixtures = await fetchEPLFixtures(apiKey);
+  const eplFixtures = await fetchEPLFixtures(apiKey);
+  let wcFixtures: APIFixture[] = [];
+  
+  try {
+    wcFixtures = await fetchWorldCupFixtures(apiKey);
+    console.log(`[Sports API] Fetched ${wcFixtures.length} World Cup fixtures.`);
+  } catch (error: any) {
+    console.error("[Sports API] Failed to fetch World Cup fixtures:", error.message);
+  }
+  const fixtures = [...eplFixtures, ...wcFixtures];
   
   for (const fixture of fixtures) {
     const existingEvent = await db
