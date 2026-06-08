@@ -154,6 +154,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/circle/social-auth", async (req, res) => {
+    try {
+      const { oauthCode, provider } = req.body;
+      if (!oauthCode || !provider) {
+        return res.status(400).json({ error: "oauthCode and provider are required" });
+      }
+
+      const circleResponse = await fetch("https://api.circle.com/v1/w3s/users/social", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
+        },
+        body: JSON.stringify({ oauthCode, provider })
+      });
+
+      if (!circleResponse.ok) {
+        const errorText = await circleResponse.text();
+        throw new Error(`Circle social exchange failed: ${circleResponse.status} - ${errorText}`);
+      }
+
+      const circleData = await circleResponse.json();
+      const { userId, userToken, encryptionKey } = circleData.data;
+
+      const wallets = await circleService.getUserWallets(userId);
+      const walletAddress = wallets.length > 0 ? wallets[0].address : null;
+
+      res.json({
+        userId,
+        userToken,
+        encryptionKey,
+        appId: process.env.CIRCLE_APP_ID || "mock-app-id",
+        walletAddress
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/circle/app-id", async (req, res) => {
+    res.json({ appId: process.env.CIRCLE_APP_ID || "mock-app-id" });
+  });
+
   app.post("/api/circle/challenge", async (req, res) => {
     try {
       const { userToken, contractAddress, abiFunctionSignature, abiParameters } = req.body;

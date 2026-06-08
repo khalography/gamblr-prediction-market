@@ -34,6 +34,7 @@ interface Web3ContextType {
   walletBalance: string;
   connectWallet: (selectedProvider?: WalletProvider) => Promise<void>;
   connectCircleWallet: (username: string) => Promise<void>;
+  connectCircleSocialWallet: (provider: "google", sandboxEmail?: string) => Promise<void>;
   disconnectWallet: () => void;
   refreshBalances: () => Promise<void>;
   isConnecting: boolean;
@@ -291,6 +292,77 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         setInternalBalance("250.00");
         setWalletBalance("1000.00");
       }
+    }
+  }, []);
+
+  // Listen for Circle Social Login redirect hash on page load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const initSocialSdk = async () => {
+      try {
+        const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk");
+        
+        const onLoginComplete = async (error: any, result: any) => {
+          if (error) {
+            console.error("Circle social login redirect error:", error);
+            toast({
+              title: "Social Login Failed",
+              description: error.message || "Failed to complete social login redirection.",
+              variant: "destructive"
+            });
+            return;
+          }
+          if (result) {
+            const { userToken, encryptionKey, oAuthInfo } = result;
+            const userId = oAuthInfo?.socialUserUUID || oAuthInfo?.socialUserInfo?.email || "social-user";
+
+            toast({ title: "Connecting Wallet...", description: "Retrieving your user wallet from Circle." });
+
+            const res = await apiRequest("POST", "/api/circle/user", { username: userId });
+            const data = await res.json();
+
+            circleUserTokenRef.current = userToken;
+            circleEncryptionKeyRef.current = encryptionKey;
+            circleAppIdRef.current = data.appId;
+
+            setAccount(data.walletAddress);
+            setWalletType("circle");
+            setCircleUsername(userId);
+
+            localStorage.setItem("lastWallet", "circle");
+            localStorage.setItem("circleUsername", userId);
+            localStorage.setItem("isSandbox", "false");
+            localStorage.setItem("circleAccount", data.walletAddress);
+
+            // Clear hash so we don't re-trigger on reload
+            window.location.hash = "";
+
+            toast({
+              title: "Google Wallet Connected",
+              description: "Successfully authenticated with Google!"
+            });
+          }
+        };
+
+        const appRes = await fetch("/api/circle/app-id");
+        if (appRes.ok) {
+          const { appId } = await appRes.json();
+          circleAppIdRef.current = appId;
+          
+          if (appId && appId !== "mock-app-id") {
+            new W3SSdk({
+              appSettings: { appId }
+            }, onLoginComplete);
+          }
+        }
+      } catch (err) {
+        console.error("Error in social SDK init:", err);
+      }
+    };
+
+    if (window.location.hash && (window.location.hash.includes("id_token") || window.location.hash.includes("access_token") || window.location.hash.includes("error"))) {
+      initSocialSdk();
     }
   }, []);
 
@@ -680,6 +752,55 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Circle user-controlled wallet connect with Google
+  const connectCircleSocialWallet = async (provider: "google", sandboxEmail?: string) => {
+    setIsConnecting(true);
+    try {
+      if (isSandbox || !circleAppIdRef.current) {
+        // Sandbox mode connects instantly with a mock Google address
+        const email = sandboxEmail || "mock-google-user@gmail.com";
+        const hashedName = email.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const mockAddress = "0x" + "9999" + hashedName.toString(16).padStart(36, '0');
+        
+        setAccount(mockAddress);
+        setWalletType("circle");
+        setCircleUsername(email);
+        setInternalBalance("250.00");
+        setWalletBalance("1000.00");
+        setIsOwner(true);
+
+        localStorage.setItem("lastWallet", "circle");
+        localStorage.setItem("circleUsername", email);
+        localStorage.setItem("isSandbox", "true");
+        localStorage.setItem("circleAccount", mockAddress);
+        
+        toast({
+          title: "Google Sandbox Login",
+          description: `Logged in via Google as ${email}. Initialized with mock balances.`
+        });
+      } else {
+        // LIVE MODE using Circle SDK
+        const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk");
+        const sdk = new W3SSdk({
+          appSettings: { appId: circleAppIdRef.current || "" }
+        });
+
+        // Trigger Google OAuth redirect/popup flow via Circle SDK
+        toast({ title: "Redirecting...", description: "Connecting to Google Auth." });
+        await sdk.performLogin("Google" as any);
+      }
+    } catch (err: any) {
+      console.error("Circle Google login failed:", err);
+      toast({
+        title: "Login Failed",
+        description: err.message || "Could not log in with Google.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   return (
     <Web3Context.Provider value={{
       account,
@@ -693,6 +814,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       walletBalance,
       connectWallet,
       connectCircleWallet,
+      connectCircleSocialWallet,
       disconnectWallet,
       refreshBalances,
       isConnecting,
