@@ -37,6 +37,6 @@ scratch/
 check-wc.ts
 check-owner.js
 test-db.ts
-api/*.js
+
 
 .vercel
