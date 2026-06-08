@@ -517,31 +517,12 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
   // MetaMask/Legacy connect
   const connectWallet = async (selectedProvider?: WalletProvider) => {
-    if (!selectedProvider && availableWallets.length > 1) {
+    if (!selectedProvider) {
       setShowWalletSelector(true);
       return;
     }
-    if (!selectedProvider && availableWallets.length === 1) {
-      selectedProvider = availableWallets[0];
-    }
-    if (!selectedProvider) {
-      if (window.ethereum) {
-        selectedProvider = {
-          uuid: "legacy",
-          name: "Browser Wallet",
-          icon: "",
-          rdns: "",
-          provider: window.ethereum
-        };
-      } else {
-        toast({
-          title: "Wallet not found",
-          description: "Please install MetaMask or another Web3 extension.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
+
+
 
     setIsConnecting(true);
     setShowWalletSelector(false);
